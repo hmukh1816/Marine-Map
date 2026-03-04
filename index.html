@@ -1,0 +1,1254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReefWatch — Global Marine Biodiversity & Protection Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+/* ── DESIGN SYSTEM ────────────────────────────────────────────────── */
+:root {
+  --bg:        #050e14;
+  --surface:   #0a1a24;
+  --border:    #1a3444;
+  --accent:    #00d4ff;
+  --accent2:   #00ff9d;
+  --text:      #c8dde8;
+  --text-dim:  #4a6b7c;
+  --green:     #2ecc71;
+  --yellow:    #f1c40f;
+  --red:       #e74c3c;
+  --panel-w:   320px;
+  --mono: 'Space Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+}
+
+/* ── MAP ─────────────────────────────────────────────────────────── */
+#map {
+  flex: 1;
+  height: 100vh;
+  background: #071218;
+}
+
+/* ── LEFT PANEL ──────────────────────────────────────────────────── */
+#panel {
+  width: var(--panel-w);
+  height: 100vh;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 1000;
+  flex-shrink: 0;
+}
+
+#panel-header {
+  padding: 20px 18px 14px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(135deg, #071e2e 0%, #0a2a3a 100%);
+}
+
+#panel-header h1 {
+  font-family: var(--sans);
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+  color: #fff;
+  margin-bottom: 3px;
+}
+
+#panel-header h1 span { color: var(--accent); }
+
+#panel-header p {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+#panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 0 80px;
+}
+
+#panel-scroll::-webkit-scrollbar { width: 3px; }
+#panel-scroll::-webkit-scrollbar-track { background: transparent; }
+#panel-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── SECTION HEADERS ─────────────────────────────────────────────── */
+.section-label {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 14px 18px 6px;
+  opacity: 0.7;
+}
+
+/* ── LAYER TOGGLES ───────────────────────────────────────────────── */
+.layer-group {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+  margin-bottom: 2px;
+}
+
+.layer-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 18px;
+  cursor: pointer;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.layer-item:hover { background: rgba(0,212,255,0.04); }
+
+.layer-item input[type="checkbox"] { display: none; }
+
+.toggle {
+  width: 32px;
+  height: 16px;
+  background: var(--border);
+  border-radius: 8px;
+  flex-shrink: 0;
+  position: relative;
+  transition: background 0.2s;
+  cursor: pointer;
+}
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  width: 10px; height: 10px;
+  top: 3px; left: 3px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  transition: transform 0.2s, background 0.2s;
+}
+
+.layer-item.active .toggle {
+  background: rgba(0,212,255,0.25);
+  border: 1px solid var(--accent);
+}
+
+.layer-item.active .toggle::after {
+  transform: translateX(16px);
+  background: var(--accent);
+}
+
+.layer-dot {
+  width: 8px; height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.layer-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  flex: 1;
+  line-height: 1.2;
+}
+
+.layer-sub {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  display: block;
+  margin-top: 1px;
+}
+
+/* ── OPACITY SLIDERS ─────────────────────────────────────────────── */
+.opacity-row {
+  padding: 0 18px 8px 60px;
+  display: none;
+}
+
+.opacity-row.visible { display: flex; align-items: center; gap: 8px; }
+
+.opacity-row label {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  white-space: nowrap;
+}
+
+.opacity-row input[type="range"] {
+  flex: 1;
+  height: 2px;
+  -webkit-appearance: none;
+  background: var(--border);
+  border-radius: 1px;
+  outline: none;
+}
+
+.opacity-row input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: pointer;
+}
+
+/* ── LEGEND ──────────────────────────────────────────────────────── */
+#legend-section { padding: 0 18px 12px; }
+
+.legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.legend-swatch {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.legend-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.legend-sub {
+  color: var(--text-dim);
+  font-size: 8px;
+}
+
+/* Gradient bar for SST */
+.gradient-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(to right,
+    #313695, #4575b4, #74add1, #abd9e9,
+    #e0f3f8, #fee090, #fdae61, #f46d43,
+    #d73027, #a50026);
+  margin: 4px 0;
+}
+
+.gradient-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-dim);
+}
+
+/* ── THRESHOLD TABLE ─────────────────────────────────────────────── */
+#thresholds {
+  margin: 0 18px 12px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.thresh-row {
+  display: flex;
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  gap: 8px;
+}
+
+.thresh-row:last-child { border-bottom: none; }
+
+.thresh-key {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--accent);
+  white-space: nowrap;
+  min-width: 90px;
+}
+
+.thresh-val {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* ── OBIS POPUP / PANEL ──────────────────────────────────────────── */
+#obis-panel {
+  position: fixed;
+  right: -380px;
+  top: 0;
+  width: 360px;
+  height: 100vh;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  z-index: 2000;
+  transition: right 0.35s cubic-bezier(0.4,0,0.2,1);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#obis-panel.open { right: 0; }
+
+#obis-header {
+  padding: 18px 18px 14px;
+  background: linear-gradient(135deg, #071e2e, #0a2a3a);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+#obis-header h2 {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent2);
+}
+
+#obis-header p {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+#obis-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  width: 24px; height: 24px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+
+#obis-close:hover { border-color: var(--accent); color: var(--accent); }
+
+#obis-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+
+#obis-body::-webkit-scrollbar { width: 3px; }
+#obis-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.obis-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.obis-stat-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.obis-stat-value {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent2);
+}
+
+.species-list {
+  margin-top: 12px;
+}
+
+.species-list h4 {
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.7;
+  margin-bottom: 8px;
+}
+
+.species-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.species-rank {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  width: 14px;
+}
+
+.species-name {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text);
+  flex: 1;
+  font-style: italic;
+}
+
+.species-bar-wrap { width: 60px; }
+
+.species-bar {
+  height: 3px;
+  background: linear-gradient(to right, var(--accent2), var(--accent));
+  border-radius: 2px;
+}
+
+.species-count {
+  font-family: var(--mono);
+  font-size: 8px;
+  color: var(--text-dim);
+  width: 30px;
+  text-align: right;
+}
+
+.obis-loading {
+  text-align: center;
+  padding: 40px 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+
+.obis-spinner {
+  display: inline-block;
+  width: 20px; height: 20px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent2);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin-bottom: 10px;
+}
+
+/* ── PULSE ANIMATION for red zones ──────────────────────────────── */
+@keyframes pulse-red {
+  0%   { opacity: 1; }
+  50%  { opacity: 0.3; }
+  100% { opacity: 1; }
+}
+
+.pulse-layer { animation: pulse-red 2s ease-in-out infinite; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── STATUS BAR ──────────────────────────────────────────────────── */
+#status-bar {
+  position: fixed;
+  bottom: 0;
+  left: var(--panel-w);
+  right: 0;
+  height: 28px;
+  background: rgba(5,14,20,0.9);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  gap: 16px;
+  z-index: 900;
+}
+
+.status-item {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+}
+
+.status-item span { color: var(--accent); }
+
+/* ── LOADING OVERLAY ─────────────────────────────────────────────── */
+#loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  transition: opacity 0.5s;
+}
+
+#loading h2 {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+#loading p {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+}
+
+.loading-bar {
+  width: 200px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 1px;
+  overflow: hidden;
+}
+
+.loading-progress {
+  height: 100%;
+  background: linear-gradient(to right, var(--accent2), var(--accent));
+  animation: progress 1.5s ease-in-out infinite;
+}
+
+@keyframes progress {
+  0%   { width: 0%; margin-left: 0; }
+  50%  { width: 60%; margin-left: 20%; }
+  100% { width: 0%; margin-left: 100%; }
+}
+
+/* ── LEAFLET OVERRIDES ───────────────────────────────────────────── */
+.leaflet-control-zoom {
+  border: 1px solid var(--border) !important;
+  background: var(--surface) !important;
+}
+
+.leaflet-control-zoom a {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border-color: var(--border) !important;
+}
+
+.leaflet-control-zoom a:hover { background: var(--border) !important; }
+
+.leaflet-popup-content-wrapper {
+  background: var(--surface) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+
+.leaflet-popup-tip { background: var(--surface) !important; }
+
+/* Biodiversity hex styling */
+.bio-hex-sig { stroke: var(--accent2); stroke-width: 1; }
+.bio-hex-norm { stroke: #1a3444; stroke-width: 0.5; }
+</style>
+</head>
+<body>
+
+<!-- Loading screen -->
+<div id="loading">
+  <h2>REEF<span style="color:var(--accent2)">WATCH</span></h2>
+  <p>INITIALISING GLOBAL LAYERS</p>
+  <div class="loading-bar"><div class="loading-progress"></div></div>
+</div>
+
+<!-- Left control panel -->
+<div id="panel">
+  <div id="panel-header">
+    <h1>REEF<span>WATCH</span></h1>
+    <p>Global Marine Observatory</p>
+  </div>
+
+  <div id="panel-scroll">
+
+    <!-- RISK ANALYSIS -->
+    <div class="section-label">Risk Analysis</div>
+    <div class="layer-group">
+      <div class="layer-item active" data-layer="traffic_green" onclick="toggleLayer(this)">
+        <input type="checkbox" checked>
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#2ecc71;box-shadow:0 0 6px #2ecc71;"></div>
+        <div class="layer-name">Protected + Healthy
+          <span class="layer-sub">MPA • no bleaching • DHW&lt;0</span>
+        </div>
+      </div>
+      <div class="opacity-row visible" id="op-traffic_green">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="75" oninput="setOpacity('traffic_green',this.value)">
+      </div>
+
+      <div class="layer-item active" data-layer="traffic_yellow" onclick="toggleLayer(this)">
+        <input type="checkbox" checked>
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#f1c40f;box-shadow:0 0 6px #f1c40f;"></div>
+        <div class="layer-name">Protected + Bleaching
+          <span class="layer-sub">MPA present • bleach or DHW≥4</span>
+        </div>
+      </div>
+      <div class="opacity-row visible" id="op-traffic_yellow">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="75" oninput="setOpacity('traffic_yellow',this.value)">
+      </div>
+
+      <div class="layer-item active" data-layer="traffic_red" onclick="toggleLayer(this)">
+        <input type="checkbox" checked>
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#e74c3c;box-shadow:0 0 8px #e74c3c;"></div>
+        <div class="layer-name">Unprotected + Bleaching ◉
+          <span class="layer-sub">No MPA • active bleaching (pulsing)</span>
+        </div>
+      </div>
+      <div class="opacity-row visible" id="op-traffic_red">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="85" oninput="setOpacity('traffic_red',this.value)">
+      </div>
+    </div>
+
+    <!-- BIODIVERSITY -->
+    <div class="section-label">Biodiversity (OBIS)</div>
+    <div class="layer-group">
+      <div class="layer-item active" data-layer="bio_significant" onclick="toggleLayer(this)">
+        <input type="checkbox" checked>
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#00ff9d;"></div>
+        <div class="layer-name">High Biodiversity Zones
+          <span class="layer-sub">≥10 species/hex • coloured by protection</span>
+        </div>
+      </div>
+      <div class="opacity-row visible" id="op-bio_significant">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="65" oninput="setOpacity('bio_significant',this.value)">
+      </div>
+    </div>
+
+    <!-- PROTECTED AREAS -->
+    <div class="section-label">Protected Areas — WDPA</div>
+    <div class="layer-group">
+      <div class="layer-item" data-layer="mpa_strict" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#0099ff;"></div>
+        <div class="layer-name">Strictly Protected MPAs
+          <span class="layer-sub">IUCN Ia · Ib · II</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-mpa_strict">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="50" oninput="setOpacity('mpa_strict',this.value)">
+      </div>
+
+      <div class="layer-item" data-layer="mpa_managed" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#66ccff;"></div>
+        <div class="layer-name">Managed Use MPAs
+          <span class="layer-sub">IUCN III · IV · V · VI</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-mpa_managed">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="50" oninput="setOpacity('mpa_managed',this.value)">
+      </div>
+    </div>
+
+    <!-- CORAL REEF -->
+    <div class="section-label">Coral Reef — Allen Atlas v2</div>
+    <div class="layer-group">
+      <div class="layer-item" data-layer="benthic" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#ff9933;"></div>
+        <div class="layer-name">Benthic Habitat Map
+          <span class="layer-sub">Coral · Algae · Seagrass · Sand</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-benthic">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="70" oninput="setOpacity('benthic',this.value)">
+      </div>
+
+      <div class="layer-item" data-layer="bleaching" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#ff4444;"></div>
+        <div class="layer-name">Bleaching Severity
+          <span class="layer-sub">4-level: watch → alert 1 → alert 2 → severe</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-bleaching">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="70" oninput="setOpacity('bleaching',this.value)">
+      </div>
+    </div>
+
+    <!-- OCEAN CLIMATE -->
+    <div class="section-label">Ocean Climate — NOAA OISST</div>
+    <div class="layer-group">
+      <div class="layer-item" data-layer="sst" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:linear-gradient(to right,#313695,#a50026);width:16px;border-radius:2px;"></div>
+        <div class="layer-name">Sea Surface Temperature
+          <span class="layer-sub">Weekly composite · °C</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-sst">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="60" oninput="setOpacity('sst',this.value)">
+      </div>
+
+      <div class="layer-item" data-layer="dhw" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#fed976;"></div>
+        <div class="layer-name">Degree Heating Weeks
+          <span class="layer-sub">DHW ≥4 alert · ≥8 severe</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-dhw">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="60" oninput="setOpacity('dhw',this.value)">
+      </div>
+    </div>
+
+    <!-- COASTAL -->
+    <div class="section-label">Coastal Ecosystems — GMW</div>
+    <div class="layer-group">
+      <div class="layer-item" data-layer="mangrove" onclick="toggleLayer(this)">
+        <input type="checkbox">
+        <div class="toggle"></div>
+        <div class="layer-dot" style="background:#1a9641;"></div>
+        <div class="layer-name">Global Mangrove Watch 2020
+          <span class="layer-sub">JAXA · GMW extent</span>
+        </div>
+      </div>
+      <div class="opacity-row" id="op-mangrove">
+        <label>OPACITY</label>
+        <input type="range" min="0" max="100" value="80" oninput="setOpacity('mangrove',this.value)">
+      </div>
+    </div>
+
+    <!-- LEGEND -->
+    <div class="section-label">Legend</div>
+    <div id="legend-section">
+      <div style="margin-bottom:10px;">
+        <div style="font-family:var(--mono);font-size:8px;color:var(--text-dim);margin-bottom:4px;">SEA SURFACE TEMP (°C)</div>
+        <div class="gradient-bar"></div>
+        <div class="gradient-labels"><span>20°</span><span>26°</span><span>32°</span></div>
+      </div>
+
+      <div style="margin-bottom:10px;">
+        <div style="font-family:var(--mono);font-size:8px;color:var(--text-dim);margin-bottom:4px;">DEGREE HEATING WEEKS</div>
+        <div style="height:8px;border-radius:4px;background:linear-gradient(to right,#fff,#fed976,#fd8d3c,#e31a1c,#800026);margin:4px 0;"></div>
+        <div class="gradient-labels"><span>0</span><span>4 ⚠</span><span>8 ⛔</span><span>16</span></div>
+      </div>
+
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#2ecc71;"></div>
+        <div class="legend-label">🟢 Protected &amp; Healthy<span class="legend-sub"> — MPA, no bleach, DHW&lt;0</span></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#f1c40f;"></div>
+        <div class="legend-label">🟡 Protected but Stressed<span class="legend-sub"> — MPA + bleaching or DHW≥4</span></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#e74c3c;"></div>
+        <div class="legend-label">🔴 Unprotected + Bleaching<span class="legend-sub"> — No MPA, active bleach</span></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#00ff9d;border:1px solid #1a3444;"></div>
+        <div class="legend-label">◈ High Biodiversity (protected)<span class="legend-sub"> — ≥10 spp, inside MPA</span></div>
+      </div>
+      <div class="legend-row">
+        <div class="legend-swatch" style="background:#ff9933;border:1px solid #1a3444;"></div>
+        <div class="legend-label">◈ High Biodiversity (unprotected)<span class="legend-sub"> — ≥10 spp, outside MPA</span></div>
+      </div>
+    </div>
+
+    <!-- THRESHOLDS -->
+    <div class="section-label">Thresholds Used</div>
+    <div id="thresholds">
+      <div class="thresh-row">
+        <div class="thresh-key">DHW Watch</div>
+        <div class="thresh-val">≥ 0 °C-weeks — bleaching possible</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">DHW Alert 1</div>
+        <div class="thresh-val">≥ 4 °C-weeks — significant bleaching</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">DHW Alert 2</div>
+        <div class="thresh-val">≥ 8 °C-weeks — severe / mortality</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">SST Anomaly</div>
+        <div class="thresh-val">&gt;1°C above MMM thermal stress</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">Bleach Cls 3</div>
+        <div class="thresh-val">Allen Atlas — moderate bleaching</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">Bleach Cls 4</div>
+        <div class="thresh-val">Allen Atlas — severe bleaching</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">OBIS Sig.</div>
+        <div class="thresh-val">≥ 10 species / hex cell (res.4)</div>
+      </div>
+      <div class="thresh-row">
+        <div class="thresh-key">H3 Hex Res</div>
+        <div class="thresh-val">4 ≈ 1700 km² / cell</div>
+      </div>
+    </div>
+
+  </div><!-- /panel-scroll -->
+</div><!-- /panel -->
+
+<!-- Map -->
+<div id="map"></div>
+
+<!-- OBIS Side Panel -->
+<div id="obis-panel">
+  <div id="obis-header">
+    <div>
+      <h2>OBIS Inspector</h2>
+      <p id="obis-coords">Click reef area to inspect</p>
+    </div>
+    <button id="obis-close" onclick="closeObis()">✕</button>
+  </div>
+  <div id="obis-body">
+    <div class="obis-loading">
+      <div class="obis-spinner"></div><br>
+      CLICK ANY REEF AREA ON THE MAP<br>TO LOAD BIODIVERSITY DATA
+    </div>
+  </div>
+</div>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <div class="status-item">LAT <span id="stat-lat">—</span></div>
+  <div class="status-item">LON <span id="stat-lon">—</span></div>
+  <div class="status-item">ZOOM <span id="stat-zoom">4</span></div>
+  <div class="status-item" style="margin-left:auto">OBIS API <span style="color:var(--accent2)">LIVE</span></div>
+  <div class="status-item">GEE TILES <span id="tile-status" style="color:var(--accent2)">READY</span></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  REEFWATCH — Interactive Map Controller
+// ═══════════════════════════════════════════════════════════════════
+
+// ── CONFIG ─────────────────────────────────────────────────────────
+// After running gee_export_layers.py, paste the tile URLs here OR
+// load from tile_urls.json (fetch below). Demo URLs shown as placeholders.
+const TILE_URLS = {
+  sst:           null,  // filled from tile_urls.json
+  dhw:           null,
+  traffic_green: null,  // NOTE: traffic light is split into 3 layers below
+  bleaching:     null,
+  benthic:       null,
+  mangrove:      null,
+};
+
+// ── INIT MAP ────────────────────────────────────────────────────────
+const map = L.map('map', {
+  center: [10, 20],
+  zoom: 3,
+  zoomControl: true,
+  attributionControl: false,
+});
+
+// Dark ocean basemap
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+  maxZoom: 18,
+  attribution: '© CartoDB'
+}).addTo(map);
+
+// ── LAYER REGISTRY ──────────────────────────────────────────────────
+// Each entry: { leafletLayer, opacity, visible }
+const LAYERS = {};
+
+// ── LOAD TILE URLS THEN BUILD LAYERS ───────────────────────────────
+async function init() {
+  let urls = {};
+  try {
+    const resp = await fetch('assets/tile_urls.json');
+    urls = await resp.json();
+    document.getElementById('tile-status').textContent = 'LOADED';
+  } catch(e) {
+    console.warn('tile_urls.json not found — using demo placeholders');
+    document.getElementById('tile-status').style.color = '#f1c40f';
+    document.getElementById('tile-status').textContent = 'DEMO MODE';
+    urls = getDemoFallbackUrls();
+  }
+
+  buildGEELayers(urls);
+  buildTrafficLightLayers(urls);
+  buildBioLayer();
+  buildMPALayers();
+  setupMapEvents();
+  hideLoading();
+}
+
+// ── DEMO FALLBACK (OpenSeaMap + GEBCO for visual demo) ─────────────
+function getDemoFallbackUrls() {
+  return {
+    sst: 'https://tile.gbif.org/4326/omt/{z}/{x}/{y}@1x.png?style=gbif-geyser',
+    dhw: null,
+    bleaching: null,
+    benthic: null,
+    mangrove: null,
+  };
+}
+
+// ── BUILD GEE RASTER TILE LAYERS ───────────────────────────────────
+function buildGEELayers(urls) {
+  const defs = [
+    { key: 'sst',      url: urls.sst,      opacity: 0.6 },
+    { key: 'dhw',      url: urls.dhw,      opacity: 0.6 },
+    { key: 'bleaching',url: urls.bleaching, opacity: 0.7 },
+    { key: 'benthic',  url: urls.benthic,  opacity: 0.7 },
+    { key: 'mangrove', url: urls.mangrove, opacity: 0.8 },
+  ];
+
+  defs.forEach(({ key, url, opacity }) => {
+    if (!url) return;
+    const layer = L.tileLayer(url, {
+      opacity,
+      attribution: 'GEE / Google Earth Engine',
+      tileSize: 256,
+      maxZoom: 12,
+    });
+    LAYERS[key] = { leafletLayer: layer, opacity, visible: false };
+  });
+}
+
+// ── TRAFFIC LIGHT LAYERS ────────────────────────────────────────────
+// These are computed from the GEE traffic_light raster, filtered by value.
+// In production the single tile URL covers all 3; here we demonstrate
+// separate visual layers via a canvas pane for the red pulsing effect.
+
+function buildTrafficLightLayers(urls) {
+  if (urls.traffic_light) {
+    // Single GEE tile contains 1=green,2=yellow,3=red — load as-is
+    const trafficLayer = L.tileLayer(urls.traffic_light, {
+      opacity: 0.75,
+      maxZoom: 12,
+    });
+    LAYERS['traffic_all'] = { leafletLayer: trafficLayer, opacity: 0.75, visible: false };
+  }
+
+  // For the pulsing red layer, we use a second identical tile with CSS animation
+  // applied via a custom pane
+  map.createPane('pulsePane');
+  map.getPane('pulsePane').style.zIndex = 450;
+  map.getPane('pulsePane').classList.add('pulse-layer');
+
+  // Individual colour layers (green/yellow/red) are pre-split in GEE export
+  // and stored as separate tile URLs if available; otherwise use combined.
+  ['traffic_green','traffic_yellow','traffic_red'].forEach((key, i) => {
+    const tileUrl = urls[key] || urls.traffic_light;
+    if (!tileUrl) return;
+    const pane = key === 'traffic_red' ? 'pulsePane' : 'overlayPane';
+    const layer = L.tileLayer(tileUrl, {
+      opacity: 0.75,
+      pane,
+      maxZoom: 12,
+    });
+    LAYERS[key] = { leafletLayer: layer, opacity: 0.75, visible: true };
+    layer.addTo(map);
+  });
+}
+
+// ── BIODIVERSITY HEX LAYER ──────────────────────────────────────────
+// Loads pre-computed OBIS hex grid. Falls back to demo synthetic grid.
+function buildBioLayer() {
+  const bioGroup = L.layerGroup();
+
+  async function loadBioHex() {
+    let hexData = null;
+    try {
+      const resp = await fetch('assets/obis_hex_grid.geojson');
+      hexData = await resp.json();
+    } catch(e) {
+      hexData = generateDemoBioHex();
+    }
+
+    // MPA lookup set (simplified — full overlap requires spatial query)
+    L.geoJSON(hexData, {
+      style: feature => {
+        const sig = feature.properties.significant;
+        const protected_ = feature.properties.in_mpa;  // set during grid gen
+        let fill = sig
+          ? (protected_ ? '#00ff9d' : '#ff9933')
+          : 'transparent';
+        return {
+          fillColor: fill,
+          fillOpacity: sig ? 0.55 : 0,
+          color: sig ? (protected_ ? '#00ff9d' : '#ff9933') : 'transparent',
+          weight: sig ? 0.8 : 0,
+        };
+      },
+      onEachFeature: (feature, layer) => {
+        if (feature.properties.significant) {
+          layer.on('click', e => {
+            L.DomEvent.stopPropagation(e);
+            openObisPanel(
+              feature.properties.lat,
+              feature.properties.lon,
+              feature.properties
+            );
+          });
+          layer.bindTooltip(
+            `<b>${feature.properties.species_richness} species</b><br>
+             ${feature.properties.occurrences?.toLocaleString() || '—'} records`,
+            { className: 'reef-tooltip', sticky: true }
+          );
+        }
+      }
+    }).addTo(bioGroup);
+  }
+
+  loadBioHex();
+  LAYERS['bio_significant'] = { leafletLayer: bioGroup, opacity: 0.65, visible: true };
+  bioGroup.addTo(map);
+}
+
+// ── DEMO BIO HEX (when no geojson available) ────────────────────────
+function generateDemoBioHex() {
+  const features = [];
+  const reefLons = [-80, -65, 25, 45, 55, 100, 115, 130, 145, 150, 165, 175, -170];
+  const reefLats = [20, 15, -5, -10, -20, 10, -10, -15, -20, -23, -18, -20, -17];
+
+  reefLons.forEach((lon, i) => {
+    const lat = reefLats[i];
+    for (let dl = -4; dl <= 4; dl += 2) {
+      for (let dlt = -4; dlt <= 4; dlt += 2) {
+        const richness = Math.floor(8 + Math.random() * 40);
+        const sig = richness >= 10;
+        if (!sig) continue;
+        const cx = lon + dl, cy = lat + dlt;
+        const hex = hexPolygon(cx, cy, 1.5);
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [hex] },
+          properties: {
+            lat: cy, lon: cx,
+            species_richness: richness,
+            occurrences: richness * Math.floor(50 + Math.random()*300),
+            significant: sig,
+            in_mpa: Math.random() > 0.4,
+          }
+        });
+      }
+    }
+  });
+  return { type: 'FeatureCollection', features };
+}
+
+function hexPolygon(cx, cy, r) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 3) * i;
+    pts.push([cx + r * Math.cos(a), cy + r * Math.sin(a)]);
+  }
+  pts.push(pts[0]);
+  return pts;
+}
+
+// ── MPA VECTOR LAYERS ───────────────────────────────────────────────
+function buildMPALayers() {
+  async function load(key, file, color) {
+    const group = L.layerGroup();
+    try {
+      const resp = await fetch(`assets/${file}`);
+      const data = await resp.json();
+      L.geoJSON(data, {
+        style: { color, weight: 0.8, fillColor: color, fillOpacity: 0.15 }
+      }).addTo(group);
+    } catch(e) {
+      console.warn(`${file} not found — run GEE export first`);
+    }
+    LAYERS[key] = { leafletLayer: group, opacity: 0.5, visible: false };
+  }
+  load('mpa_strict',  'mpa_strict.geojson',  '#0099ff');
+  load('mpa_managed', 'mpa_managed.geojson', '#66ccff');
+}
+
+// ── LAYER TOGGLE ────────────────────────────────────────────────────
+function toggleLayer(el) {
+  const key = el.dataset.layer;
+  const entry = LAYERS[key];
+  const isActive = el.classList.toggle('active');
+  const opRow = document.getElementById(`op-${key}`);
+  if (opRow) opRow.classList.toggle('visible', isActive);
+
+  if (!entry) return;
+  if (isActive) {
+    entry.leafletLayer.addTo(map);
+    entry.visible = true;
+  } else {
+    map.removeLayer(entry.leafletLayer);
+    entry.visible = false;
+  }
+}
+
+function setOpacity(key, val) {
+  const entry = LAYERS[key];
+  if (!entry) return;
+  const opacity = val / 100;
+  entry.opacity = opacity;
+  if (entry.leafletLayer.setOpacity) entry.leafletLayer.setOpacity(opacity);
+  else if (entry.leafletLayer.eachLayer) {
+    entry.leafletLayer.eachLayer(l => { if(l.setOpacity) l.setOpacity(opacity); });
+  }
+}
+
+// ── MAP EVENTS ─────────────────────────────────────────────────────
+function setupMapEvents() {
+  map.on('mousemove', e => {
+    document.getElementById('stat-lat').textContent = e.latlng.lat.toFixed(3);
+    document.getElementById('stat-lon').textContent = e.latlng.lng.toFixed(3);
+  });
+
+  map.on('zoomend', () => {
+    document.getElementById('stat-zoom').textContent = map.getZoom();
+  });
+
+  // Click on map (not hex) — still trigger OBIS
+  map.on('click', e => {
+    const lat = e.latlng.lat, lon = e.latlng.lng;
+    if (lat >= -35 && lat <= 35) {
+      openObisPanel(lat, lon, null);
+    }
+  });
+}
+
+// ── OBIS INSPECTOR ──────────────────────────────────────────────────
+const OBIS_API = 'https://api.obis.org/v3';
+
+async function openObisPanel(lat, lon, preloaded) {
+  document.getElementById('obis-panel').classList.add('open');
+  document.getElementById('obis-coords').textContent =
+    `${lat.toFixed(3)}° / ${lon.toFixed(3)}°`;
+
+  const body = document.getElementById('obis-body');
+  body.innerHTML = `<div class="obis-loading">
+    <div class="obis-spinner"></div><br>QUERYING OBIS DATABASE…</div>`;
+
+  try {
+    const radius = 50000; // 50km
+
+    // Fetch occurrence summary
+    const [summResp, coralResp, topResp] = await Promise.all([
+      fetch(`${OBIS_API}/statistics/species?lat=${lat}&lon=${lon}&radius=${radius}`),
+      fetch(`${OBIS_API}/occurrence?lat=${lat}&lon=${lon}&radius=${radius}&scientificname=Scleractinia&size=0`),
+      fetch(`${OBIS_API}/occurrence?lat=${lat}&lon=${lon}&radius=${radius}&size=500`)
+    ]);
+
+    const summ  = summResp.ok  ? await summResp.json()  : {};
+    const coral = coralResp.ok ? await coralResp.json() : {};
+    const top   = topResp.ok   ? await topResp.json()   : { results: [] };
+
+    const richness    = summ.species   || preloaded?.species_richness || 0;
+    const records     = summ.records   || preloaded?.occurrences      || 0;
+    const coralCount  = coral.total    || 0;
+
+    // Top 8 species
+    const speciesCounts = {};
+    (top.results || []).forEach(r => {
+      const sp = r.scientificName || 'Unknown';
+      speciesCounts[sp] = (speciesCounts[sp] || 0) + 1;
+    });
+    const top8 = Object.entries(speciesCounts)
+      .sort((a,b) => b[1]-a[1]).slice(0,8);
+    const maxCount = top8[0]?.[1] || 1;
+
+    body.innerHTML = `
+      <div class="obis-stat">
+        <span class="obis-stat-label">TOTAL SPECIES RICHNESS</span>
+        <span class="obis-stat-value">${richness.toLocaleString()}</span>
+      </div>
+      <div class="obis-stat">
+        <span class="obis-stat-label">OCCURRENCE RECORDS</span>
+        <span class="obis-stat-value">${records.toLocaleString()}</span>
+      </div>
+      <div class="obis-stat">
+        <span class="obis-stat-label">CORAL SPECIES (SCLERACTINIA)</span>
+        <span class="obis-stat-value">${coralCount.toLocaleString()}</span>
+      </div>
+      <div class="obis-stat">
+        <span class="obis-stat-label">RADIUS</span>
+        <span class="obis-stat-value" style="font-size:11px;color:var(--text-dim)">50 km</span>
+      </div>
+      ${richness >= 10
+        ? `<div style="margin-top:8px;padding:6px 8px;background:rgba(0,255,157,0.08);
+               border:1px solid rgba(0,255,157,0.3);border-radius:4px;
+               font-family:var(--mono);font-size:9px;color:var(--accent2)">
+             ◈ SIGNIFICANT BIODIVERSITY ZONE (&gt;10 species)
+           </div>`
+        : ''}
+      <div class="species-list">
+        <h4>Top 8 Most Recorded Species</h4>
+        ${top8.length === 0
+          ? '<div style="font-family:var(--mono);font-size:9px;color:var(--text-dim)">No records in this area</div>'
+          : top8.map(([name, count], i) => `
+          <div class="species-row">
+            <span class="species-rank">${i+1}</span>
+            <span class="species-name">${name}</span>
+            <div class="species-bar-wrap">
+              <div class="species-bar" style="width:${Math.round(count/maxCount*100)}%"></div>
+            </div>
+            <span class="species-count">${count}</span>
+          </div>`).join('')}
+      </div>
+      <div style="margin-top:16px;padding:8px;background:rgba(0,0,0,0.2);
+           border-radius:4px;font-family:var(--mono);font-size:8px;color:var(--text-dim)">
+        Source: OBIS API (Ocean Biodiversity Information System)<br>
+        Query: ${lat.toFixed(4)}, ${lon.toFixed(4)} · r=50km
+      </div>
+    `;
+  } catch(e) {
+    body.innerHTML = `<div class="obis-loading" style="color:#e74c3c">
+      OBIS API UNAVAILABLE<br><span style="font-size:8px">${e.message}</span></div>`;
+  }
+}
+
+function closeObis() {
+  document.getElementById('obis-panel').classList.remove('open');
+}
+
+// ── HIDE LOADING ────────────────────────────────────────────────────
+function hideLoading() {
+  setTimeout(() => {
+    const el = document.getElementById('loading');
+    el.style.opacity = '0';
+    setTimeout(() => el.remove(), 500);
+  }, 800);
+}
+
+// ── START ───────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
